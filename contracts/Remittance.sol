@@ -6,62 +6,70 @@ contract Remittance is Mortal {
   bytes32 private alicePasswordSha3;
   bytes32 private bobPasswordSha3;
 
-  // 0 means no deadline
-  // non-0 means the max block index at which this can be redeemed
-  uint public deadline;
 
   uint constant public MAX_DEADLINE = 100;
 
-  function Remittance(bytes32 _alicePasswordSha3, bytes32 _bobPasswordSha3, uint _deadline)
+  struct Wallet {
+    address owner;
+    uint value;
+    // 0 means no deadline
+    // non-0 means the max block index at which this can be redeemed
+    uint deadline;
+  }
+
+  mapping(bytes32 => mapping(bytes32 => Wallet)) public wallets;
+
+  function deposit(bytes32 password1Sha3, bytes32 password2Sha3, uint deadline)
   public
   payable
   {
     require(msg.value > 0);
-    require(keccak256("") != _alicePasswordSha3);
-    require(keccak256("") != _bobPasswordSha3);
-    require(_deadline <= MAX_DEADLINE);
+    require(keccak256("") != password1Sha3);
+    require(keccak256("") != password2Sha3);
+    require(deadline <= MAX_DEADLINE);
 
-    alicePasswordSha3 = _alicePasswordSha3;
-    bobPasswordSha3 = _bobPasswordSha3;
+    Wallet memory wallet;
+    wallet.owner = msg.sender;
+    wallet.amount = msg.value;
 
-    if (_deadline > 0) {
-      deadline = block.number + _deadline;
+    if (deadline > 0) {
+      wallet.deadline = block.number + deadline;
     }
+
+    wallets[password1Sha3][password2Sha3] = wallet;
   }
 
-  function redeem(string alicePassword, string bobPassword)
+  function redeem(string password1, string password2)
   public
   withinDeadline
   returns (bool success)
   {
-    require(keccak256(alicePassword) == alicePasswordSha3);
-    require(keccak256(bobPassword) == bobPasswordSha3);
+    wallet = wallets[keccak256(password1)][keccak256(password2)];
 
-    msg.sender.transfer(this.balance);
-    selfdestruct(msg.sender);
+    msg.sender.transfer(wallet.value);
 
     return true;
   }
 
-  function refund()
-  public
-  pastDeadline
-  onlyOwner
-  returns (bool success)
-  {
-    getOwner().transfer(this.balance);
-    selfdestruct(msg.sender);
+  // function refund()
+  // public
+  // pastDeadline
+  // onlyOwner
+  // returns (bool success)
+  // {
+  //   getOwner().transfer(this.balance);
+  //   selfdestruct(msg.sender);
 
-    return true;
-  }
+  //   return true;
+  // }
 
-  modifier withinDeadline {
-    require(deadline == 0 || block.number <= deadline);
-    _;
-  }
+  // modifier withinDeadline {
+  //   require(deadline == 0 || block.number <= deadline);
+  //   _;
+  // }
 
-  modifier pastDeadline {
-    require(deadline > 0 && block.number > deadline);
-    _;
-  }
+  // modifier pastDeadline {
+  //   require(deadline > 0 && block.number > deadline);
+  //   _;
+  // }
 }
