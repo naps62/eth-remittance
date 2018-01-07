@@ -36,6 +36,9 @@ contract Remittance is Mortal {
     require(keccak256("") != passwordSha3);
     require(deadline <= block.number + MAX_DEADLINE);
 
+    // is this the proper way to ensure this?
+    require(wallets[passwordSha3].owner == address(0));
+
     Wallet memory wallet;
     wallet.owner = msg.sender;
     wallet.recipient = recipient;

@@ -252,4 +252,25 @@ contract("Remittance", accounts => {
 
     assertEvent(contract, { event: "LogRefund", args: { recipient: carol, owner: alice } });
   });
+
+  it.only("prevents password re-use", async () => {
+    await contract.deposit(
+      carol,
+      hash,
+      0,
+      { from: alice, value: value }
+    );
+
+    try {
+      await contract.deposit(
+        alice,
+        hash,
+        0,
+        { from: carol, value: value }
+      );
+      assert.fail();
+    } catch(err) {
+      assertRevert(err);
+    }
+  })
 });
