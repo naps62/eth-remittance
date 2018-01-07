@@ -19,44 +19,52 @@ contract Remittance is Mortal {
     uint deadline;
   }
 
-  mapping(bytes32 => mapping(bytes32 => Wallet)) public wallets;
+  mapping(bytes32 => Wallet) public wallets;
 
-  function deposit(address recipient, bytes32 password1Sha3, bytes32 password2Sha3, uint deadline)
+  event LogDeposit(address indexed owner, address indexed recipient, uint value);
+  event LogRedeem(address indexed owner, address indexed recipient, uint value);
+  event LogRefund(address indexed owner, address indexed recipient, uint value);
+
+  function deposit(address recipient, bytes32 passwordSha3, uint deadline)
   public
   payable
+  returns (bool success)
   {
     uint initialGas = msg.gas;
 
     require(msg.value > 0);
-    require(keccak256("") != password1Sha3);
-    require(keccak256("") != password2Sha3);
-    require(deadline <= MAX_DEADLINE);
+    require(keccak256("") != passwordSha3);
+    require(deadline <= block.number + MAX_DEADLINE);
 
     Wallet memory wallet;
     wallet.owner = msg.sender;
     wallet.recipient = recipient;
-
-    if (deadline > 0) {
-      wallet.deadline = block.number + deadline;
-    }
+    wallet.deadline = deadline;
 
     uint fees = (initialGas - msg.gas) * tx.gasprice;
     wallet.value = msg.value - wallet.fee;
     totalFees += fees;
 
-    wallets[password1Sha3][password2Sha3] = wallet;
+    wallets[passwordSha3] = wallet;
+
+    LogDeposit(wallet.owner, wallet.recipient, msg.value);
+
+    return true;
   }
 
-  function redeem(string password1, string password2)
+  function redeem(string password)
   public
   returns (bool success)
   {
-    Wallet memory wallet = wallets[keccak256(password1)][keccak256(password2)];
+    Wallet memory wallet = wallets[keccak256(password)];
     // is there a better way of checking the wallet exists?
+    require(wallet.recipient != address(0));
     require(wallet.recipient == msg.sender);
     ensureWithinDeadline(wallet);
 
     wallet.recipient.transfer(wallet.value);
+
+    LogRedeem(wallet.owner, wallet.recipient, wallet.value);
 
     return true;
   }
@@ -74,17 +82,19 @@ contract Remittance is Mortal {
     return true;
   }
 
-  function refund(string password1, string password2)
+  function refund(string password)
   public
   returns (bool success)
   {
-    Wallet memory wallet = wallets[keccak256(password1)][keccak256(password2)];
+    Wallet memory wallet = wallets[keccak256(password)];
     // is there a better way of checking the wallet exists?
     require(wallet.owner != address(0));
     require(msg.sender == wallet.owner);
     ensurePastDeadline(wallet);
 
     wallet.owner.transfer(wallet.value);
+
+    LogRefund(wallet.owner, wallet.recipient, wallet.value);
 
     return true;
   }
@@ -100,6 +110,6 @@ contract Remittance is Mortal {
   private
   view
   {
-    require(wallet.deadline > 0 && block.number > wallet.deadline);
+    require(wallet.deadline == 0 || block.number > wallet.deadline);
   }
 }
