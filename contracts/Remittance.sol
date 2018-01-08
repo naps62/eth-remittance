@@ -55,11 +55,11 @@ contract Remittance is Mortal {
     return true;
   }
 
-  function redeem(string password)
+  function redeem(string password1, string password2)
   public
   returns (bool success)
   {
-    Wallet memory wallet = wallets[keccak256(password)];
+    Wallet memory wallet = wallets[keccak256(password1, password2)];
     // is there a better way of checking the wallet exists?
     require(wallet.recipient != address(0));
     require(wallet.recipient == msg.sender);

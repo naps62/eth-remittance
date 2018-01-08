@@ -253,7 +253,7 @@ contract("Remittance", accounts => {
     assertEvent(contract, { event: "LogRefund", args: { recipient: carol, owner: alice } });
   });
 
-  it.only("prevents password re-use", async () => {
+  it("prevents password re-use", async () => {
     await contract.deposit(
       carol,
       hash,
