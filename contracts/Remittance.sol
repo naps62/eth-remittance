@@ -9,7 +9,7 @@ contract Remittance is Mortal {
   uint constant public MAX_DEADLINE = 100;
   uint public totalFees;
 
-  struct Wallet {
+  struct Escrow {
     address owner;
     address recipient;
     uint value;
@@ -17,9 +17,10 @@ contract Remittance is Mortal {
     // 0 means no deadline
     // non-0 means the max block index at which this can be redeemed
     uint deadline;
+    bool withdrawn;
   }
 
-  mapping(bytes32 => Wallet) public wallets;
+  mapping(bytes32 => Escrow) public escrows;
 
   event LogDeposit(address indexed owner, address indexed recipient, uint value);
   event LogRedeem(address indexed owner, address indexed recipient, uint value);
@@ -37,20 +38,20 @@ contract Remittance is Mortal {
     require(deadline <= block.number + MAX_DEADLINE);
 
     // is this the proper way to ensure this?
-    require(wallets[passwordSha3].owner == address(0));
+    require(escrows[passwordSha3].owner == address(0));
 
-    Wallet memory wallet;
-    wallet.owner = msg.sender;
-    wallet.recipient = recipient;
-    wallet.deadline = deadline;
+    Escrow memory escrow;
+    escrow.owner = msg.sender;
+    escrow.recipient = recipient;
+    escrow.deadline = deadline;
 
     uint fees = (initialGas - msg.gas) * tx.gasprice;
-    wallet.value = msg.value - wallet.fee;
+    escrow.value = msg.value - fees;
     totalFees += fees;
 
-    wallets[passwordSha3] = wallet;
+    escrows[passwordSha3] = escrow;
 
-    LogDeposit(wallet.owner, wallet.recipient, msg.value);
+    LogDeposit(escrow.owner, escrow.recipient, msg.value);
 
     return true;
   }
@@ -59,15 +60,30 @@ contract Remittance is Mortal {
   public
   returns (bool success)
   {
-    Wallet memory wallet = wallets[keccak256(password1, password2)];
-    // is there a better way of checking the wallet exists?
-    require(wallet.recipient != address(0));
-    require(wallet.recipient == msg.sender);
-    ensureWithinDeadline(wallet);
+    Escrow memory escrow = findValidEscrow(password1, password2);
+    require(escrow.recipient == msg.sender);
+    ensureWithinDeadline(escrow);
 
-    wallet.recipient.transfer(wallet.value);
+    escrow.withdrawn = true;
+    escrow.recipient.transfer(escrow.value);
 
-    LogRedeem(wallet.owner, wallet.recipient, wallet.value);
+    LogRedeem(escrow.owner, escrow.recipient, escrow.value);
+
+    return true;
+  }
+
+  function refund(string password1, string password2)
+  public
+  returns (bool success)
+  {
+    Escrow memory escrow = findValidEscrow(password1, password2);
+    require(escrow.owner == msg.sender);
+    ensurePastDeadline(escrow);
+
+    escrow.withdrawn = true;
+    escrow.owner.transfer(escrow.value);
+
+    LogRefund(escrow.owner, escrow.recipient, escrow.value);
 
     return true;
   }
@@ -85,34 +101,37 @@ contract Remittance is Mortal {
     return true;
   }
 
-  function refund(string password)
-  public
-  returns (bool success)
-  {
-    Wallet memory wallet = wallets[keccak256(password)];
-    // is there a better way of checking the wallet exists?
-    require(wallet.owner != address(0));
-    require(msg.sender == wallet.owner);
-    ensurePastDeadline(wallet);
+  function findValidEscrow(string password1, string password2)
+  private
+  view
+  returns (Escrow) {
+    bytes32 hash = this.getHash(password1, password2);
+    Escrow memory escrow = escrows[hash];
+    require(escrow.recipient != address(0));
+    require(!escrow.withdrawn);
 
-    wallet.owner.transfer(wallet.value);
-
-    LogRefund(wallet.owner, wallet.recipient, wallet.value);
-
-    return true;
+    return escrow;
   }
 
-  function ensureWithinDeadline(Wallet wallet)
+  function ensureWithinDeadline(Escrow escrow)
   private
   view
   {
-    require(wallet.deadline == 0 || block.number <= wallet.deadline);
+    require(escrow.deadline == 0 || block.number <= escrow.deadline);
   }
 
-  function ensurePastDeadline(Wallet wallet)
+  function ensurePastDeadline(Escrow escrow)
   private
   view
   {
-    require(wallet.deadline == 0 || block.number > wallet.deadline);
+    require(escrow.deadline == 0 || block.number > escrow.deadline);
+  }
+
+  function getHash(string p1, string p2)
+  external
+  pure
+  returns (bytes32)
+  {
+    return keccak256(p1, p2);
   }
 }

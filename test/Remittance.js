@@ -2,6 +2,7 @@ const Remittance = artifacts.require("./Remittance.sol");
 const assertRevert = require('./helpers/assertRevert');
 const assertEvent = require('./helpers/assertEvent');
 const P = require("bluebird");
+const mine = require("./helpers/mine.js");
 
 const getBalance = P.promisify(web3.eth.getBalance);
 const sendTransaction = P.promisify(web3.eth.sendTransaction);
@@ -15,13 +16,17 @@ contract("Remittance", accounts => {
   const alicePassword = "password1";
   const bobPassword = "password2";
   const password = alicePassword + bobPassword;
-  const hash = web3.sha3(password);
   const value = web3.toWei(0.01, "ether");
+  let hash = null;
   let contract = null;
+
+  const encryptPasswords = async (p1, p2) => await contract.getHash(p1, p2);
 
   beforeEach(async () => {
     contract = await Remittance.new({ from: alice });
+    hash = await encryptPasswords(alicePassword, bobPassword);
   });
+
 
   it("can't make a deposit without ether", async () => {
     try {
@@ -41,7 +46,7 @@ contract("Remittance", accounts => {
     try {
       await contract.deposit(
         carol,
-        web3.sha3(""),
+        await encryptPasswords("", ""),
         currentBlock() + 1,
         { from: alice, value: 1 }
       );
@@ -74,7 +79,7 @@ contract("Remittance", accounts => {
     );
 
     const initial = await getBalance(carol);
-    await contract.redeem(password, { from: carol });
+    await contract.redeem(alicePassword, bobPassword, { from: carol });
     const final = await getBalance(carol);
 
     assert(final.greaterThan(initial));
@@ -89,7 +94,7 @@ contract("Remittance", accounts => {
     );
 
     try {
-      await contract.redeem("", { from: otherAccount });
+      await contract.redeem(alicePassword, bobPassword, { from: otherAccount });
       assert.fail();
     } catch(err) {
       assertRevert(err);
@@ -105,7 +110,7 @@ contract("Remittance", accounts => {
         { from: alice, value: value }
       );
 
-      await contract.redeem("invalid", { from: carol });
+      await contract.redeem("invalid", "bobPassword", { from: carol });
       assert.fail();
     } catch(err) {
       assertRevert(err);
@@ -125,7 +130,8 @@ contract("Remittance", accounts => {
 
     try {
       const tx = await contract.redeem(
-        password,
+        alicePassword,
+        bobPassword,
         { from: carol }
       );
       assert.fail();
@@ -146,7 +152,7 @@ contract("Remittance", accounts => {
     await sendTransaction({ from: accounts[1], to: accounts[0], value: 1 })
 
     const initial = await getBalance(alice);
-    await contract.refund(password, { from: alice });
+    await contract.refund(alicePassword, bobPassword, { from: alice });
     const final = await getBalance(alice);
 
     assert(final.greaterThan(initial));
@@ -161,7 +167,7 @@ contract("Remittance", accounts => {
     );
 
     const initial = await getBalance(alice);
-    await contract.refund(password, { from: alice });
+    await contract.refund(alicePassword, bobPassword, { from: alice });
     const final = await getBalance(alice);
 
     assert(final.greaterThan(initial));
@@ -179,7 +185,7 @@ contract("Remittance", accounts => {
     await sendTransaction({ from: accounts[1], to: accounts[0], value: 1 })
 
     try {
-      await contract.refund(password, { from: carol });
+      await contract.refund(alicePassword, bobPassword, { from: carol });
       assert.fail();
     } catch(err) {
       assertRevert(err);
@@ -228,14 +234,18 @@ contract("Remittance", accounts => {
   });
 
   it("logs an event when a redeem is made", async () => {
-    await contract.deposit(
-      carol,
-      hash,
-      currentBlock() + 10,
-      { from: alice, value: value }
+    await mine(
+      await contract.deposit.sendTransaction(
+        carol,
+        hash,
+        currentBlock() + 10,
+        { from: alice, value: value }
+      )
     );
 
-    await contract.redeem(password, { from: carol })
+    await mine(
+      await contract.redeem.sendTransaction(alicePassword, bobPassword, { from: carol })
+    )
 
     assertEvent(contract, { event: "LogRedeem", args: { recipient: carol, owner: alice } });
   });
@@ -248,7 +258,7 @@ contract("Remittance", accounts => {
       { from: alice, value: value }
     );
 
-    await contract.refund(password, { from: alice })
+    await contract.refund(alicePassword, bobPassword, { from: alice })
 
     assertEvent(contract, { event: "LogRefund", args: { recipient: carol, owner: alice } });
   });
