@@ -2,7 +2,7 @@ const Remittance = artifacts.require("./Remittance.sol");
 const assertRevert = require('./helpers/assertRevert');
 const assertEvent = require('./helpers/assertEvent');
 const P = require("bluebird");
-const mine = require("./helpers/mine.js");
+const mineTx = require("./helpers/mineTx.js");
 
 const getBalance = P.promisify(web3.eth.getBalance);
 const sendTransaction = P.promisify(web3.eth.sendTransaction);
@@ -233,9 +233,9 @@ contract("Remittance", accounts => {
     assertEvent(contract, { event: "LogDeposit", args: { recipient: carol, owner: alice } });
   });
 
-  it("logs an event when a redeem is made", async () => {
-    await mine(
-      await contract.deposit.sendTransaction(
+  it.only("logs an event when a redeem is made", async () => {
+    await mineTx(
+      contract.deposit(
         carol,
         hash,
         currentBlock() + 10,
@@ -243,8 +243,8 @@ contract("Remittance", accounts => {
       )
     );
 
-    await mine(
-      await contract.redeem.sendTransaction(alicePassword, bobPassword, { from: carol })
+    await mineTx(
+      contract.redeem(alicePassword, bobPassword, { from: carol })
     )
 
     assertEvent(contract, { event: "LogRedeem", args: { recipient: carol, owner: alice } });
