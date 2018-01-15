@@ -19,8 +19,9 @@ contract("Remittance", accounts => {
   const value = web3.toWei(0.01, "ether");
   let hash = null;
   let contract = null;
+  let tx = null;
 
-  const encryptPasswords = async (p1, p2) => await contract.getHash(p1, p2);
+  const encryptPasswords = async (p1, p2) => tx = contract.getHash(p1, p2);
 
   beforeEach(async () => {
     contract = await Remittance.new({ from: alice });
@@ -30,12 +31,13 @@ contract("Remittance", accounts => {
 
   it("can't make a deposit without ether", async () => {
     try {
-      await contract.deposit(
+      tx = contract.deposit(
         carol,
         hash,
         currentBlock() + 1,
         { from: alice }
       )
+      await mineTx(tx);
       assert.fail();
     } catch(err) {
       assertRevert(err);
@@ -44,12 +46,13 @@ contract("Remittance", accounts => {
 
   it("can't make a deposit using hashes from empty passwords", async() => {
     try {
-      await contract.deposit(
+      tx = contract.deposit(
         carol,
         await encryptPasswords("", ""),
         currentBlock() + 1,
         { from: alice, value: 1 }
       );
+      await mineTx(tx);
       assert.fail();
     } catch(err) {
       assertRevert(err);
@@ -58,12 +61,13 @@ contract("Remittance", accounts => {
 
   it("can't make a deposit with too big a deadline", async() => {
     try {
-      await contract.deposit(
+      tx = contract.deposit(
         carol,
         hash,
         currentBlock() + 1000,
         { from: alice, value: 1 }
       );
+      await mineTx(tx);
       assert.fail();
     } catch(err) {
       assertRevert(err);
@@ -71,30 +75,34 @@ contract("Remittance", accounts => {
   });
 
   it("can be redemeed with correct passwords", async () => {
-    await contract.deposit(
+    tx = contract.deposit(
       carol,
       hash,
       currentBlock() + 10,
       { from: alice, value: value }
     );
+    await mineTx(tx);
 
     const initial = await getBalance(carol);
-    await contract.redeem(alicePassword, bobPassword, { from: carol });
+    tx = contract.redeem(alicePassword, bobPassword, { from: carol });
+    await mineTx(tx);
     const final = await getBalance(carol);
 
     assert(final.greaterThan(initial));
   });
 
   it("cannot be redeemed by someone other than the recipient, even with the passwords", async () => {
-    await contract.deposit(
+    tx = contract.deposit(
       carol,
       hash,
       currentBlock() + 10,
       { from: alice, value: value }
     );
+    await mineTx(tx);
 
     try {
-      await contract.redeem(alicePassword, bobPassword, { from: otherAccount });
+      tx = contract.redeem(alicePassword, bobPassword, { from: otherAccount });
+      await mineTx(tx);
       assert.fail();
     } catch(err) {
       assertRevert(err);
@@ -103,14 +111,16 @@ contract("Remittance", accounts => {
 
   it("cannot be redeemed with incorrect passwords", async () => {
     try {
-      await contract.deposit(
+      tx = contract.deposit(
         carol,
         hash,
         currentBlock() + 10,
         { from: alice, value: value }
       );
+      await mineTx(tx);
 
-      await contract.redeem("invalid", "bobPassword", { from: carol });
+      tx = contract.redeem("invalid", "bobPassword", { from: carol });
+      await mineTx(tx);
       assert.fail();
     } catch(err) {
       assertRevert(err);
@@ -118,22 +128,25 @@ contract("Remittance", accounts => {
   });
 
   it("can't be redeemed if deadline has passed", async() => {
-    await contract.deposit(
+    tx = contract.deposit(
       carol,
       hash,
       currentBlock() + 1,
       { from: alice, value: value }
     );
+  await mineTx(tx);
 
     // force creation of a new block, to expire the deadline
-    await sendTransaction({ from: accounts[1], to: accounts[0], value: 1 })
+    tx = sendTransaction({ from: accounts[1], to: accounts[0], value: 1 })
+    await mineTx(tx);
 
     try {
-      const tx = await contract.redeem(
+      tx = contract.redeem(
         alicePassword,
         bobPassword,
         { from: carol }
       );
+      await mineTx(tx);
       assert.fail();
     } catch(err) {
       assertRevert(err);
@@ -141,51 +154,59 @@ contract("Remittance", accounts => {
   });
 
   it("can be refunded by the owner if deadline has passed", async() => {
-    await contract.deposit(
+    tx = contract.deposit(
       carol,
       hash,
       currentBlock() + 1,
       { from: alice, value: value }
     );
+    await mineTx(tx);
 
     // force creation of a new block, to expire the deadline
-    await sendTransaction({ from: accounts[1], to: accounts[0], value: 1 })
+    tx = sendTransaction({ from: accounts[1], to: accounts[0], value: 1 })
+    await mineTx(tx);
 
     const initial = await getBalance(alice);
-    await contract.refund(alicePassword, bobPassword, { from: alice });
+    tx = contract.refund(alicePassword, bobPassword, { from: alice });
+    await mineTx(tx);
     const final = await getBalance(alice);
 
     assert(final.greaterThan(initial));
   });
 
   it("can be refunded by the owner if there is no deadline", async() => {
-    await contract.deposit(
+    tx = contract.deposit(
       carol,
       hash,
       0,
       { from: alice, value: value }
     );
+    await mineTx(tx);
 
     const initial = await getBalance(alice);
-    await contract.refund(alicePassword, bobPassword, { from: alice });
+    tx = contract.refund(alicePassword, bobPassword, { from: alice });
+    await mineTx(tx);
     const final = await getBalance(alice);
 
     assert(final.greaterThan(initial));
   });
 
-  it("cannot by refunded by a non-owner", async() => {
-    await contract.deposit(
+  it("cannot be refunded by a non-owner", async() => {
+    tx = contract.deposit(
       carol,
       hash,
       currentBlock() + 10,
       { from: alice, value: value }
     );
+    await mineTx(tx);
 
     // force creation of a new block, to expire the deadline
-    await sendTransaction({ from: accounts[1], to: accounts[0], value: 1 })
+    tx = sendTransaction({ from: accounts[1], to: accounts[0], value: 1 })
+    await mineTx(tx);
 
     try {
-      await contract.refund(alicePassword, bobPassword, { from: carol });
+      tx = contract.refund(alicePassword, bobPassword, { from: carol });
+      await mineTx(tx);
       assert.fail();
     } catch(err) {
       assertRevert(err);
@@ -193,14 +214,15 @@ contract("Remittance", accounts => {
   });
 
   it("takes a small fee", async () => {
-    const result = await contract.deposit(
+    tx = contract.deposit(
       carol,
       hash,
       currentBlock() + 10,
       { from: alice, value: value }
     );
+    const result = await mineTx(tx);
 
-    const transaction = web3.eth.getTransaction(result.tx);
+    const transaction = web3.eth.getTransaction(result.transactionHash);
     const txCost = transaction.gasPrice.times(transaction.gas);
     const fees = await contract.totalFees();
 
@@ -209,75 +231,79 @@ contract("Remittance", accounts => {
   });
 
   it("allows the owner to redeem the fees", async () => {
-    await contract.deposit(
+    tx = contract.deposit(
       carol,
       hash,
       currentBlock() + 10,
       { from: alice, value: value }
     );
+    await mineTx(tx);
 
     // fees for a single deposit are to low to actually assert that
     // the transaction gave alice a profit
     // because the redemption itself costs more
-    assert.ok(await contract.redeemFees({ from: alice }));
+    assert.ok(tx = contract.redeemFees({ from: alice }));
   });
 
   it("logs an event when a deposit is made", async () => {
-    await contract.deposit(
+    tx = contract.deposit(
       carol,
       hash,
       currentBlock() + 1,
       { from: alice, value: value }
     );
+    await mineTx(tx);
 
     assertEvent(contract, { event: "LogDeposit", args: { recipient: carol, owner: alice } });
   });
 
-  it.only("logs an event when a redeem is made", async () => {
-    await mineTx(
-      contract.deposit(
-        carol,
-        hash,
-        currentBlock() + 10,
-        { from: alice, value: value }
-      )
+  it("logs an event when a redeem is made", async () => {
+    tx = contract.deposit(
+      carol,
+      hash,
+      currentBlock() + 10,
+      { from: alice, value: value }
     );
+    await mineTx(tx);
 
-    await mineTx(
-      contract.redeem(alicePassword, bobPassword, { from: carol })
-    )
+    tx = contract.redeem(alicePassword, bobPassword, { from: carol })
+    await mineTx(tx);
 
     assertEvent(contract, { event: "LogRedeem", args: { recipient: carol, owner: alice } });
   });
 
   it("logs an event when a refund is made", async () => {
-    await contract.deposit(
+    tx = contract.deposit(
       carol,
       hash,
       0,
       { from: alice, value: value }
     );
+    await mineTx(tx);
 
-    await contract.refund(alicePassword, bobPassword, { from: alice })
+    tx = contract.refund(alicePassword, bobPassword, { from: alice })
+    await mineTx(tx);
 
     assertEvent(contract, { event: "LogRefund", args: { recipient: carol, owner: alice } });
   });
 
   it("prevents password re-use", async () => {
-    await contract.deposit(
+    tx = contract.deposit(
       carol,
       hash,
       0,
       { from: alice, value: value }
     );
+    await mineTx(tx);
 
     try {
-      await contract.deposit(
+      tx = contract.deposit(
         alice,
         hash,
         0,
         { from: carol, value: value }
       );
+      await mineTx(tx);
       assert.fail();
     } catch(err) {
       assertRevert(err);
