@@ -13,16 +13,14 @@ contract Remittance is Mortal {
     address owner;
     address recipient;
     uint value;
-    uint fee;
     // 0 means no deadline
     // non-0 means the max block index at which this can be redeemed
     uint deadline;
-    bool withdrawn;
   }
 
   mapping(bytes32 => Escrow) public escrows;
 
-  event LogDeposit(address indexed owner, address indexed recipient, uint value);
+  event LogDeposit(address indexed owner, address indexed recipient, uint value, uint fees);
   event LogRedeem(address indexed owner, address indexed recipient, uint value);
   event LogRefund(address indexed owner, address indexed recipient, uint value);
 
@@ -40,7 +38,7 @@ contract Remittance is Mortal {
     // is this the proper way to ensure this?
     require(escrows[passwordSha3].owner == address(0));
 
-    Escrow memory escrow;
+    Escrow storage escrow = escrows[passwordSha3];
     escrow.owner = msg.sender;
     escrow.recipient = recipient;
     escrow.deadline = deadline;
@@ -49,9 +47,7 @@ contract Remittance is Mortal {
     escrow.value = msg.value - fees;
     totalFees += fees;
 
-    escrows[passwordSha3] = escrow;
-
-    LogDeposit(escrow.owner, escrow.recipient, msg.value);
+    LogDeposit(escrow.owner, escrow.recipient, escrow.value, fees);
 
     return true;
   }
@@ -64,10 +60,11 @@ contract Remittance is Mortal {
     require(escrow.recipient == msg.sender);
     ensureWithinDeadline(escrow);
 
-    escrow.withdrawn = true;
-    escrow.recipient.transfer(escrow.value);
+    uint value = escrow.value;
+    escrow.value = 0;
+    escrow.recipient.transfer(value);
 
-    LogRedeem(escrow.owner, escrow.recipient, escrow.value);
+    LogRedeem(escrow.owner, escrow.recipient, value);
 
     return true;
   }
@@ -80,10 +77,11 @@ contract Remittance is Mortal {
     require(escrow.owner == msg.sender);
     ensurePastDeadline(escrow);
 
-    escrow.withdrawn = true;
-    escrow.owner.transfer(escrow.value);
+    uint value = escrow.value;
+    escrow.value = 0;
+    escrow.owner.transfer(value);
 
-    LogRefund(escrow.owner, escrow.recipient, escrow.value);
+    LogRefund(escrow.owner, escrow.recipient, value);
 
     return true;
   }
@@ -95,8 +93,8 @@ contract Remittance is Mortal {
   {
     require(totalFees > 0);
 
-    msg.sender.transfer(totalFees);
     totalFees = 0;
+    msg.sender.transfer(totalFees);
 
     return true;
   }
@@ -108,7 +106,7 @@ contract Remittance is Mortal {
     bytes32 hash = this.getHash(password1, password2);
     Escrow memory escrow = escrows[hash];
     require(escrow.recipient != address(0));
-    require(!escrow.withdrawn);
+    // require(escrow.value > 0);
 
     return escrow;
   }

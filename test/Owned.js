@@ -27,7 +27,7 @@ contract("Owned", accounts => {
     assert.strictEqual(tx.logs[0].args.newOwner, alice);
   });
 
-  it.only("does not allow alice to make herself the owner", async () => {
+  it("does not allow alice to make herself the owner", async () => {
     try {
       tx = contract.transferOwnership(alice, { from: alice })
       await mineTx(tx);

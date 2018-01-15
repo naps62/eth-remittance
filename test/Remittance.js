@@ -3,6 +3,7 @@ const assertRevert = require('./helpers/assertRevert');
 const assertEvent = require('./helpers/assertEvent');
 const P = require("bluebird");
 const mineTx = require("./helpers/mineTx.js");
+const txPrice = require("./helpers/txPrice");
 
 const getBalance = P.promisify(web3.eth.getBalance);
 const sendTransaction = P.promisify(web3.eth.sendTransaction);
@@ -16,7 +17,7 @@ contract("Remittance", accounts => {
   const alicePassword = "password1";
   const bobPassword = "password2";
   const password = alicePassword + bobPassword;
-  const value = web3.toWei(0.01, "ether");
+  const value = web3.toWei(1, "ether");
   let hash = null;
   let contract = null;
   let tx = null;
@@ -154,21 +155,21 @@ contract("Remittance", accounts => {
   });
 
   it("can be refunded by the owner if deadline has passed", async() => {
-    tx = contract.deposit(
+    const depositTx = await contract.deposit(
       carol,
       hash,
       currentBlock() + 1,
       { from: alice, value: value }
     );
-    await mineTx(tx);
+    await mineTx(depositTx);
 
     // force creation of a new block, to expire the deadline
     tx = sendTransaction({ from: accounts[1], to: accounts[0], value: 1 })
     await mineTx(tx);
 
     const initial = await getBalance(alice);
-    tx = contract.refund(alicePassword, bobPassword, { from: alice });
-    await mineTx(tx);
+    const refundTx = await contract.refund(alicePassword, bobPassword, { from: alice });
+    await mineTx(refundTx);
     const final = await getBalance(alice);
 
     assert(final.greaterThan(initial));
@@ -214,7 +215,7 @@ contract("Remittance", accounts => {
   });
 
   it("takes a small fee", async () => {
-    tx = contract.deposit(
+    tx = await contract.deposit(
       carol,
       hash,
       currentBlock() + 10,
@@ -222,15 +223,15 @@ contract("Remittance", accounts => {
     );
     const result = await mineTx(tx);
 
-    const transaction = web3.eth.getTransaction(result.transactionHash);
-    const txCost = transaction.gasPrice.times(transaction.gas);
+    const txFees = txPrice(result.transactionHash);
     const fees = await contract.totalFees();
 
     assert(fees.greaterThan(0));
-    assert(txCost.greaterThan(fees));
+    assert(fees.equals(tx.logs[0].args.fees));
+    assert(txFees.greaterThan(fees));
   });
 
-  it("allows the owner to redeem the fees", async () => {
+  it.only("allows the owner to redeem the fees", async () => {
     tx = contract.deposit(
       carol,
       hash,
@@ -239,10 +240,10 @@ contract("Remittance", accounts => {
     );
     await mineTx(tx);
 
-    // fees for a single deposit are to low to actually assert that
+    // fees for a single deposit are too low to actually assert that
     // the transaction gave alice a profit
     // because the redemption itself costs more
-    assert.ok(tx = contract.redeemFees({ from: alice }));
+    assert.ok(await contract.redeemFees({ from: alice }));
   });
 
   it("logs an event when a deposit is made", async () => {

@@ -18,13 +18,13 @@ contract("Mortal", accounts => {
 
     const currentOwner = await contract.getOwner();
 
-    assert.equal(currentOwner, 0);
+    assert.strictEqual(currentOwner, '0x0');
   });
 
   it("creates an event when closed", async () => {
     const tx = await contract.kill({ from: owner });
 
-    assert.equal(tx.logs[0].event, "Killed");
+    assert.strictEqual(tx.logs[0].event, "Killed");
   });
 
   it("cannot be closed by anyone else", async () => {
