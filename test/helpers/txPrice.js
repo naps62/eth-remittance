@@ -8,9 +8,10 @@ const txPrice = (tx) => {
     txHash = tx.tx;
   }
 
-  const transaction = web3.eth.getTransactionReceipt(txHash);
+  const transaction = web3.eth.getTransaction(txHash);
+  const receipt = web3.eth.getTransactionReceipt(txHash);
 
-  return web3.eth.gasPrice.times(transaction.gasUsed);
+  return transaction.gasPrice.times(receipt.gasUsed);
 }
 
 module.exports = txPrice;

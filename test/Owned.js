@@ -8,11 +8,13 @@ contract("Owned", accounts => {
   let contract = null;
   let tx = null;
 
-  beforeEach(async () => {
+  beforeEach("deploy Owned", async () => {
     contract = await Owned.new({ from: owner });
   })
 
   it("can change ownership", async () => {
+    assert.strictEqual(await contract.getOwner(), owner);
+
     const tx = await contract.transferOwnership(alice, { from: owner })
 
     assert.strictEqual(await contract.getOwner(), alice);

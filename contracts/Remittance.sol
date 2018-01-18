@@ -35,7 +35,6 @@ contract Remittance is Mortal {
     require(keccak256("") != passwordSha3);
     require(deadline <= block.number + MAX_DEADLINE);
 
-    // is this the proper way to ensure this?
     require(escrows[passwordSha3].owner == address(0));
 
     Escrow storage escrow = escrows[passwordSha3];
@@ -43,7 +42,7 @@ contract Remittance is Mortal {
     escrow.recipient = recipient;
     escrow.deadline = deadline;
 
-    uint fees = (initialGas - msg.gas) * tx.gasprice;
+    uint fees = min((initialGas - msg.gas) * tx.gasprice, msg.value / 2);
     escrow.value = msg.value - fees;
     totalFees += fees;
 
@@ -52,11 +51,23 @@ contract Remittance is Mortal {
     return true;
   }
 
+  function min(uint val1, uint val2)
+  private
+  pure
+  returns (uint)
+  {
+    if (val1 > val2) {
+      return val1;
+    } else {
+      return val2;
+    }
+  }
+
   function redeem(string password1, string password2)
   public
   returns (bool success)
   {
-    Escrow memory escrow = findValidEscrow(password1, password2);
+    Escrow storage escrow = findValidEscrow(password1, password2);
     require(escrow.recipient == msg.sender);
     ensureWithinDeadline(escrow);
 
@@ -73,7 +84,7 @@ contract Remittance is Mortal {
   public
   returns (bool success)
   {
-    Escrow memory escrow = findValidEscrow(password1, password2);
+    Escrow storage escrow = findValidEscrow(password1, password2);
     require(escrow.owner == msg.sender);
     ensurePastDeadline(escrow);
 
@@ -102,23 +113,23 @@ contract Remittance is Mortal {
   function findValidEscrow(string password1, string password2)
   private
   view
-  returns (Escrow) {
-    bytes32 hash = this.getHash(password1, password2);
-    Escrow memory escrow = escrows[hash];
+  returns (Escrow storage escrow) {
+    bytes32 hash = getHash(password1, password2);
+    escrow = escrows[hash];
     require(escrow.recipient != address(0));
-    // require(escrow.value > 0);
+    require(escrow.value > 0);
 
     return escrow;
   }
 
-  function ensureWithinDeadline(Escrow escrow)
+  function ensureWithinDeadline(Escrow storage escrow)
   private
   view
   {
     require(escrow.deadline == 0 || block.number <= escrow.deadline);
   }
 
-  function ensurePastDeadline(Escrow escrow)
+  function ensurePastDeadline(Escrow storage escrow)
   private
   view
   {
@@ -126,7 +137,7 @@ contract Remittance is Mortal {
   }
 
   function getHash(string p1, string p2)
-  external
+  public
   pure
   returns (bytes32)
   {
